@@ -1,0 +1,728 @@
+// ColisGui V2 - Prisma schema
+// PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- ENUMS ----------
+enum UserRole {
+  DIRECTEUR
+  ADMIN
+  COMMERCIAL
+  AGENT_CALL_CENTER
+  DISPATCHER
+  LIVREUR
+  COMPTABLE
+}
+
+enum StatutActif {
+  ACTIF
+  INACTIF
+  SUSPENDU
+}
+
+enum PartnerType {
+  ABONNE
+  NON_ABONNE
+}
+
+enum PackCode {
+  EASY
+  BOOST
+  MAX
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  SUSPENDUE
+  EXPIREE
+  EPUISEE
+}
+
+enum SubscriptionAction {
+  CREATION
+  RENOUVELLEMENT
+  SUSPENSION
+  REACTIVATION
+}
+
+enum ZoneType {
+  STANDARD
+  ETENDUE
+}
+
+enum OrderStatus {
+  CREEE
+  CONFIRMEE
+  ASSIGNEE
+  EN_COURS
+  LIVREE
+  REFUSEE
+  ANNULEE
+  RETOUR
+}
+
+enum BillingMode {
+  ABONNEMENT
+  GRILLE
+}
+
+enum MotifCategorie {
+  REFUS
+  ANNULATION
+  RETOUR
+  ECHEC_LIVRAISON
+}
+
+enum CallResult {
+  CONFIRMEE
+  INJOIGNABLE
+  REFUSEE
+  REPORTEE
+}
+
+enum PaymentMode {
+  ESPECES
+  ORANGE_MONEY
+  WAVE
+  CODE_MARCHAND
+  VIREMENT
+  MIXTE
+}
+
+enum PaymentStatus {
+  EN_ATTENTE
+  PARTIEL
+  PAYE
+}
+
+enum TransactionType {
+  COLLECTE
+  REVERSEMENT
+  COMMISSION
+  DETTE
+  DEPENSE
+  RECETTE
+}
+
+enum SensFlux {
+  ENTREE
+  SORTIE
+}
+
+enum CompteType {
+  CAISSE
+  BANQUE
+}
+
+enum EcritureSens {
+  DEBIT
+  CREDIT
+}
+
+enum DetteType {
+  DETTE
+  CREANCE
+}
+
+enum NotifCanal {
+  WHATSAPP
+  SMS
+  EMAIL
+  IN_APP
+}
+
+enum NotifStatut {
+  EN_ATTENTE
+  ENVOYE
+  ECHEC
+}
+
+// ---------- MODELS ----------
+model User {
+  id                  String       @id @default(uuid())
+  nom                 String
+  prenom              String
+  telephone           String       @unique
+  email               String?      @unique
+  passwordHash        String
+  role                UserRole
+  statut              StatutActif  @default(ACTIF)
+  derniereConnexion   DateTime?
+  createdById         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  refreshTokens       RefreshToken[]
+  passwordResets      PasswordReset[]
+  partenairesCommercial Partenaire[]
+
+  @@index([role])
+  @@index([statut])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  code            String           @unique
+  libelle         String
+  module          String
+  rolePermissions RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model RolePermission {
+  role         UserRole
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([role, permissionId])
+  @@map("role_permissions")
+}
+
+model Partenaire {
+  id            String        @id @default(uuid())
+  code          String        @unique
+  nom           String
+  telephone     String        @unique
+  email         String?
+  adresse       String?
+  gpsLat        Decimal?      @db.Decimal(10, 7)
+  gpsLng        Decimal?      @db.Decimal(10, 7)
+  type          PartnerType   @default(NON_ABONNE)
+  commercialId  String?
+  statut        StatutActif   @default(ACTIF)
+  notes         String?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  commercial    User?         @relation(fields: [commercialId], references: [id])
+  abonnements   Abonnement[]
+  commandes     Commande[]
+  transactions  Transaction[]
+  dettesCreances DetteCreance[]
+
+  @@index([commercialId])
+  @@index([type])
+  @@index([statut])
+  @@map("partenaires")
+}
+
+model Pack {
+  id                String       @id @default(uuid())
+  code              PackCode     @unique
+  libelle           String
+  nombreLivraisons  Int
+  prix              Decimal      @db.Decimal(14, 2)
+  prixParTrajet     Decimal      @db.Decimal(14, 2)
+  dureeJours        Int?
+  actif             Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  abonnements       Abonnement[]
+
+  @@map("packs")
+}
+
+model Abonnement {
+  id                    String                  @id @default(uuid())
+  partenaireId          String
+  packId                String
+  dateDebut             DateTime                @db.Date
+  dateFin               DateTime?               @db.Date
+  livraisonsIncluses    Int
+  livraisonsConsommees  Int                     @default(0)
+  livraisonsRestantes   Int
+  prixPaye              Decimal                 @db.Decimal(14, 2)
+  statut                SubscriptionStatus      @default(ACTIVE)
+  createdById           String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  partenaire            Partenaire              @relation(fields: [partenaireId], references: [id])
+  pack                  Pack                    @relation(fields: [packId], references: [id])
+  historique            AbonnementHistorique[]
+  commandes             Commande[]
+
+  @@index([partenaireId])
+  @@index([statut])
+  @@index([dateFin])
+  @@map("abonnements")
+}
+
+model AbonnementHistorique {
+  id            String              @id @default(uuid())
+  abonnementId  String
+  action        SubscriptionAction
+  ancienStatut  SubscriptionStatus?
+  nouveauStatut SubscriptionStatus?
+  commentaire   String?
+  userId        String?
+  createdAt     DateTime            @default(now())
+  abonnement    Abonnement          @relation(fields: [abonnementId], references: [id], onDelete: Cascade)
+
+  @@index([abonnementId])
+  @@map("abonnement_historique")
+}
+
+model Zone {
+  id        String     @id @default(uuid())
+  nom       String     @unique
+  type      ZoneType   @default(STANDARD)
+  actif     Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  commandes Commande[]
+
+  @@map("zones")
+}
+
+model GrilleTarif {
+  id                  String                    @id @default(uuid())
+  pointDepart         String
+  destination         String
+  zoneDepartId        String?
+  zoneDestinationId   String?
+  prix                Decimal                   @db.Decimal(14, 2)
+  actif               Boolean                   @default(true)
+  createdById         String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  historique          GrilleTarifHistorique[]
+  commandes           Commande[]
+
+  @@index([pointDepart, destination])
+  @@index([zoneDestinationId])
+  @@map("grille_tarifs")
+}
+
+model GrilleTarifHistorique {
+  id           String       @id @default(uuid())
+  grilleId     String?
+  pointDepart  String
+  destination  String
+  ancienPrix   Decimal?     @db.Decimal(14, 2)
+  nouveauPrix  Decimal      @db.Decimal(14, 2)
+  motif        String?
+  userId       String
+  createdAt    DateTime     @default(now())
+  grille       GrilleTarif? @relation(fields: [grilleId], references: [id])
+
+  @@index([grilleId])
+  @@index([createdAt])
+  @@map("grille_tarifs_historique")
+}
+
+model Motif {
+  id               String                       @id @default(uuid())
+  code             String                       @unique
+  libelle          String
+  categorie        MotifCategorie
+  actif            Boolean                      @default(true)
+  statutHistoriques CommandeStatutHistorique[]
+  callLogs         CallCenterLog[]
+
+  @@index([categorie])
+  @@map("motifs")
+}
+
+model Commande {
+  id                String                      @id @default(uuid())
+  reference         String                      @unique
+  partenaireId      String
+  clientNom         String
+  clientTelephone   String
+  clientAdresse     String
+  gpsLat            Decimal?                    @db.Decimal(10, 7)
+  gpsLng            Decimal?                    @db.Decimal(10, 7)
+  zoneId            String?
+  prixProduit       Decimal                     @default(0) @db.Decimal(14, 2)
+  fraisLivraison    Decimal                     @default(0) @db.Decimal(14, 2)
+  modeFacturation   BillingMode
+  abonnementId      String?
+  grilleTarifId     String?
+  statut            OrderStatus                 @default(CREEE)
+  observations      String?
+  livreurId         String?
+  confirmedById     String?
+  createdById       String
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  partenaire        Partenaire                  @relation(fields: [partenaireId], references: [id])
+  zone              Zone?                       @relation(fields: [zoneId], references: [id])
+  abonnement        Abonnement?                 @relation(fields: [abonnementId], references: [id])
+  grilleTarif       GrilleTarif?                @relation(fields: [grilleTarifId], references: [id])
+  livreur           Livreur?                    @relation(fields: [livreurId], references: [id])
+  statutHistorique  CommandeStatutHistorique[]
+  callLogs          CallCenterLog[]
+  affectations      Affectation[]
+  paiements         Paiement[]
+  transactions      Transaction[]
+  ecritures         EcritureComptable[]
+  evenements        CommandeEvenement[]
+
+  @@index([partenaireId])
+  @@index([statut])
+  @@index([livreurId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([partenaireId, statut])
+  @@index([livreurId, statut])
+  @@index([clientTelephone])
+  @@map("commandes")
+}
+
+model CommandeStatutHistorique {
+  id            String       @id @default(uuid())
+  commandeId    String
+  ancienStatut  OrderStatus?
+  nouveauStatut OrderStatus
+  motifId       String?
+  commentaire   String?
+  userId        String
+  createdAt     DateTime     @default(now())
+  commande      Commande     @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+  motif         Motif?       @relation(fields: [motifId], references: [id])
+
+  @@index([commandeId])
+  @@index([createdAt])
+  @@map("commande_statut_historique")
+}
+
+model Script {
+  id        String          @id @default(uuid())
+  titre     String
+  contenu   String
+  actif     Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  callLogs  CallCenterLog[]
+
+  @@map("scripts")
+}
+
+model CallCenterLog {
+  id          String     @id @default(uuid())
+  commandeId  String
+  agentId     String
+  resultat    CallResult
+  motifId     String?
+  scriptId    String?
+  commentaire String?
+  createdAt   DateTime   @default(now())
+  commande    Commande   @relation(fields: [commandeId], references: [id])
+  motif       Motif?     @relation(fields: [motifId], references: [id])
+  script      Script?    @relation(fields: [scriptId], references: [id])
+
+  @@index([commandeId])
+  @@index([agentId])
+  @@index([createdAt])
+  @@map("call_center_logs")
+}
+
+model Livreur {
+  id                   String            @id @default(uuid())
+  userId               String?
+  nom                  String
+  prenom               String
+  telephone            String            @unique
+  motoImmatriculation  String?
+  motoModele           String?
+  permisNumero         String?
+  cniNumero            String?
+  primeBase            Decimal           @default(0) @db.Decimal(14, 2)
+  statut               StatutActif       @default(ACTIF)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  documents            LivreurDocument[]
+  affectations         Affectation[]
+  commandes            Commande[]
+
+  @@index([statut])
+  @@map("livreurs")
+}
+
+model LivreurDocument {
+  id             String    @id @default(uuid())
+  livreurId      String
+  typeDocument   String
+  url            String
+  dateExpiration DateTime? @db.Date
+  valide         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  livreur        Livreur   @relation(fields: [livreurId], references: [id], onDelete: Cascade)
+
+  @@index([livreurId])
+  @@index([dateExpiration])
+  @@map("livreur_documents")
+}
+
+model Affectation {
+  id           String   @id @default(uuid())
+  commandeId   String
+  livreurId    String
+  dispatcherId String
+  priorite     Int      @default(0) @db.SmallInt
+  statut       String
+  createdAt    DateTime @default(now())
+  commande     Commande @relation(fields: [commandeId], references: [id])
+  livreur      Livreur  @relation(fields: [livreurId], references: [id])
+
+  @@index([commandeId])
+  @@index([livreurId])
+  @@index([statut])
+  @@map("affectations")
+}
+
+model Paiement {
+  id              String          @id @default(uuid())
+  commandeId      String
+  mode            PaymentMode
+  montant         Decimal         @db.Decimal(14, 2)
+  statut          PaymentStatus   @default(EN_ATTENTE)
+  referenceExterne String?
+  collecteParId   String?
+  createdAt       DateTime        @default(now())
+  commande        Commande        @relation(fields: [commandeId], references: [id])
+  lignes          PaiementLigne[]
+
+  @@index([commandeId])
+  @@index([mode])
+  @@index([statut])
+  @@map("paiements")
+}
+
+model PaiementLigne {
+  id         String      @id @default(uuid())
+  paiementId String
+  mode       PaymentMode
+  montant    Decimal     @db.Decimal(14, 2)
+  paiement   Paiement    @relation(fields: [paiementId], references: [id], onDelete: Cascade)
+
+  @@index([paiementId])
+  @@map("paiement_lignes")
+}
+
+model Compte {
+  id           String              @id @default(uuid())
+  nom          String
+  type         CompteType
+  solde        Decimal             @default(0) @db.Decimal(14, 2)
+  devise       String              @default("GNF")
+  actif        Boolean             @default(true)
+  transactions Transaction[]
+  ecritures    EcritureComptable[]
+  depenses     Depense[]
+
+  @@map("comptes")
+}
+
+model Transaction {
+  id           String              @id @default(uuid())
+  type         TransactionType
+  sens         SensFlux
+  montant      Decimal             @db.Decimal(14, 2)
+  commandeId   String?
+  partenaireId String?
+  compteId     String?
+  reference    String?
+  description  String?
+  createdById  String?
+  createdAt    DateTime            @default(now())
+  commande     Commande?           @relation(fields: [commandeId], references: [id])
+  partenaire   Partenaire?         @relation(fields: [partenaireId], references: [id])
+  compte       Compte?             @relation(fields: [compteId], references: [id])
+  ecritures    EcritureComptable[]
+
+  @@index([type])
+  @@index([partenaireId])
+  @@index([commandeId])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model EcritureComptable {
+  id            String       @id @default(uuid())
+  journal       String
+  dateEcriture  DateTime     @db.Date
+  compteId      String
+  sens          EcritureSens
+  montant       Decimal      @db.Decimal(14, 2)
+  commandeId    String?
+  transactionId String?
+  libelle       String
+  createdById   String?
+  createdAt     DateTime     @default(now())
+  compte        Compte       @relation(fields: [compteId], references: [id])
+  commande      Commande?    @relation(fields: [commandeId], references: [id])
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([journal])
+  @@index([dateEcriture])
+  @@index([compteId])
+  @@map("ecritures_comptables")
+}
+
+model Depense {
+  id             String      @id @default(uuid())
+  categorie      String
+  montant        Decimal     @db.Decimal(14, 2)
+  modePaiement   PaymentMode
+  compteId       String
+  justificatifUrl String?
+  description    String?
+  valideParId    String?
+  createdAt      DateTime    @default(now())
+  compte         Compte      @relation(fields: [compteId], references: [id])
+
+  @@map("depenses")
+}
+
+model DetteCreance {
+  id           String      @id @default(uuid())
+  partenaireId String?
+  type         DetteType
+  montant      Decimal     @db.Decimal(14, 2)
+  statut       String
+  echeance     DateTime?   @db.Date
+  description  String?
+  createdAt    DateTime    @default(now())
+  partenaire   Partenaire? @relation(fields: [partenaireId], references: [id])
+
+  @@index([partenaireId])
+  @@index([type])
+  @@index([statut])
+  @@map("dettes_creances")
+}
+
+model Rapport {
+  id            String   @id @default(uuid())
+  type          String
+  cibleType     String?
+  cibleId       String?
+  periodeDebut  DateTime @db.Date
+  periodeFin    DateTime @db.Date
+  donnees       Json
+  genereParId   String?
+  createdAt     DateTime @default(now())
+
+  @@index([type])
+  @@index([cibleType, cibleId])
+  @@map("rapports")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entite     String
+  entiteId   String?
+  avant      Json?
+  apres      Json?
+  raison     String?
+  ipAdresse  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entite, entiteId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id               String      @id @default(uuid())
+  destinataireType String
+  destinataireId   String
+  canal            NotifCanal
+  titre            String
+  contenu          String
+  statut           NotifStatut @default(EN_ATTENTE)
+  lu               Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+
+  @@index([destinataireType, destinataireId])
+  @@index([statut])
+  @@map("notifications")
+}
+
+model Parametre {
+  id          String   @id @default(uuid())
+  cle         String   @unique
+  valeur      Json
+  categorie   String
+  description String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("parametres")
+}
+
+enum EvenementType {
+  CREATION
+  CONFIRMATION
+  AFFECTATION
+  PRISE_EN_CHARGE
+  LIVRAISON
+  PAIEMENT
+  ECRITURE_COMPTABLE
+  COMMISSION
+  REVERSEMENT
+  DECREMENT_ABONNEMENT
+  NOTIFICATION
+  REFUS
+  ANNULATION
+  RETOUR
+}
+
+model CommandeEvenement {
+  id         String        @id @default(uuid())
+  commandeId String
+  type       EvenementType
+  libelle    String
+  meta       Json?
+  userId     String?
+  createdAt  DateTime      @default(now())
+  commande   Commande      @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+
+  @@index([commandeId])
+  @@index([createdAt])
+  @@map("commande_evenements")
+}
