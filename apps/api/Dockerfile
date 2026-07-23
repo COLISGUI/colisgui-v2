@@ -23,7 +23,6 @@ COPY tsconfig.json ./tsconfig.json
 COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 3000
-# ⚠️ Le port doit suivre la variable PORT (Railway en impose un dynamique).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/v1/health" >/dev/null 2>&1 || exit 1
+# Pas de HEALTHCHECK Docker : Railway effectue le sien via railway.json
+# (healthcheckPath = /api/v1/health). Deux healthchecks concurrents provoquent des faux echecs.
 ENTRYPOINT ["./docker-entrypoint.sh"]
