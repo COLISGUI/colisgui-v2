@@ -17,9 +17,18 @@ async function bootstrap() {
   app.use(cookieParser());
   app.set('trust proxy', 1); // derrière Nginx/Railway (throttler, IP réelle)
 
-  // CORS restreint par variable d'environnement (par défaut : tout, en dev)
-  const origins = (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim());
-  app.enableCors({ origin: origins.includes('*') ? true : origins, credentials: true });
+  // CORS : liste d'origines séparées par des virgules.
+  // Les jokers sont acceptés, ex. https://*.netlify.app (utile pour les déploiements
+  // de prévisualisation Netlify, dont l'URL change à chaque publication).
+  const raw = (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean);
+  const corsOrigin = raw.includes('*')
+    ? true
+    : raw.map((o) =>
+        o.includes('*')
+          ? new RegExp('^' + o.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
+          : o,
+      );
+  app.enableCors({ origin: corsOrigin, credentials: true });
 
   app.setGlobalPrefix('api/v1');
   // whitelist retire les champs inconnus ; forbidNonWhitelisted N'EST PAS activé car
@@ -30,7 +39,9 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-  await app.listen(port);
+  // '0.0.0.0' est indispensable en conteneur (Railway/Docker) : sans cela,
+  // le service peut n'écouter que sur localhost et paraître injoignable.
+  await app.listen(port, '0.0.0.0');
   new Logger('Bootstrap').log(`ColisGui API en écoute sur le port ${port} (${process.env.NODE_ENV ?? 'development'})`);
 }
 bootstrap();
