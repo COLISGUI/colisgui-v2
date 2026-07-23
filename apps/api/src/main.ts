@@ -42,6 +42,8 @@ async function bootstrap() {
   // '0.0.0.0' est indispensable en conteneur (Railway/Docker) : sans cela,
   // le service peut n'écouter que sur localhost et paraître injoignable.
   await app.listen(port, '0.0.0.0');
-  new Logger('Bootstrap').log(`ColisGui API en écoute sur le port ${port} (${process.env.NODE_ENV ?? 'development'})`);
+  const log = new Logger('Bootstrap');
+  log.log(`ColisGui API démarrée — écoute sur 0.0.0.0:${port} (${process.env.NODE_ENV ?? 'development'})`);
+  log.log(`Healthcheck disponible sur : /api/v1/health`);
 }
 bootstrap();
