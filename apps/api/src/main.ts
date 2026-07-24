@@ -17,18 +17,38 @@ async function bootstrap() {
   app.use(cookieParser());
   app.set('trust proxy', 1); // derrière Nginx/Railway (throttler, IP réelle)
 
-  // CORS : liste d'origines séparées par des virgules.
-  // Les jokers sont acceptés, ex. https://*.netlify.app (utile pour les déploiements
-  // de prévisualisation Netlify, dont l'URL change à chaque publication).
-  const raw = (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean);
-  const corsOrigin = raw.includes('*')
-    ? true
-    : raw.map((o) =>
-        o.includes('*')
-          ? new RegExp('^' + o.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
-          : o,
-      );
-  app.enableCors({ origin: corsOrigin, credentials: true });
+  // ---------------- CORS ----------------
+  // Tolérant : ignore les barres obliques finales, les espaces et la casse.
+  // Journalise les origines autorisées ET chaque refus (diagnostic Railway).
+  const corsLogger = new Logger('CORS');
+  const normalize = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
+  const raw = (process.env.CORS_ORIGINS ?? '*').split(',').map(normalize).filter(Boolean);
+  const allowAll = raw.includes('*');
+  const patterns = raw.filter((o) => o !== '*');
+
+  if (allowAll) {
+    corsLogger.warn("CORS OUVERT A TOUTES LES ORIGINES (CORS_ORIGINS='*'). A restreindre en production.");
+  } else {
+    corsLogger.log(`Origines autorisées (${patterns.length}) : ${patterns.join(' | ') || '(aucune)'}`);
+  }
+
+  app.enableCors({
+    credentials: true,
+    origin: allowAll
+      ? true
+      : (origin, cb) => {
+          if (!origin) return cb(null, true); // appels serveur-à-serveur / curl
+          const o = normalize(origin);
+          const ok = patterns.some((p) =>
+            p.includes('*')
+              ? new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$').test(o)
+              : p === o,
+          );
+          if (ok) return cb(null, true);
+          corsLogger.warn(`REFUS CORS — origine reçue : "${origin}" | autorisées : ${patterns.join(' | ')}`);
+          return cb(null, false);
+        },
+  });
 
   app.setGlobalPrefix('api/v1');
   // whitelist retire les champs inconnus ; forbidNonWhitelisted N'EST PAS activé car
