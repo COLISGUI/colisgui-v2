@@ -1,39 +1,51 @@
 #!/bin/sh
-# ColisGui API — démarrage optimisé pour Railway.
-# Le serveur HTTP démarre IMMÉDIATEMENT (pour que le healthcheck réponde),
-# le schéma de base et le seed sont appliqués en arrière-plan.
+# ColisGui API — démarrage Railway.
+# Le serveur HTTP démarre IMMEDIATEMENT ; le schema et le seed tournent en arriere-plan.
+# Les binaires sont appeles DIRECTEMENT (pas via npx) pour eviter toute erreur ENOENT.
+
+PRISMA="./node_modules/.bin/prisma"
+TSNODE="./node_modules/.bin/ts-node"
 
 echo "=================================================="
-echo " ColisGui API — démarrage"
+echo " ColisGui API — demarrage"
 echo " NODE_ENV=${NODE_ENV:-non defini}  PORT=${PORT:-3000}"
 echo "=================================================="
 
-[ -z "$DATABASE_URL" ]       && echo "!! DATABASE_URL VIDE — liez le plugin PostgreSQL au service."
+[ -f package.json ] || echo "!! package.json ABSENT dans l'image."
+[ -x "$PRISMA" ]    || echo "!! Binaire prisma introuvable ($PRISMA)."
+[ -z "$DATABASE_URL" ]       && echo "!! DATABASE_URL VIDE — liez le plugin PostgreSQL."
 [ -z "$JWT_SECRET" ]         && echo "!! JWT_SECRET VIDE — l'API refusera de demarrer."
 [ -z "$JWT_REFRESH_SECRET" ] && echo "!! JWT_REFRESH_SECRET VIDE — l'API refusera de demarrer."
 
-# --- Préparation de la base en arrière-plan ---
+# --- Preparation de la base, en arriere-plan ---
 (
-  echo "[bg] --- Application du schema ---"
-  if [ -d prisma/migrations ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
-    npx prisma migrate deploy \
-      || { echo "[bg] migrate deploy KO -> repli db push"; npx prisma db push --skip-generate --accept-data-loss; }
+  if [ ! -x "$PRISMA" ]; then
+    echo "[bg] !! prisma indisponible — schema NON applique."
   else
-    npx prisma db push --skip-generate
-  fi
-  echo "[bg] --- Schema termine ---"
-
-  if [ "${RUN_SEED:-true}" = "true" ]; then
-    echo "[bg] --- Seed (packs, zones, motifs, compte administrateur) ---"
-    if npx ts-node --transpile-only prisma/seed.ts; then
-      echo "[bg] Seed OK — compte administrateur disponible."
+    echo "[bg] --- Application du schema ---"
+    if [ -d prisma/migrations ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
+      "$PRISMA" migrate deploy \
+        || { echo "[bg] migrate deploy KO -> repli db push"; "$PRISMA" db push --skip-generate --accept-data-loss; }
     else
-      echo "[bg] !! Seed EN ECHEC — aucun compte administrateur, connexion impossible."
+      "$PRISMA" db push --skip-generate
+    fi
+    echo "[bg] --- Schema termine ---"
+
+    if [ "${RUN_SEED:-true}" = "true" ]; then
+      echo "[bg] --- Seed (packs, zones, motifs, compte administrateur) ---"
+      if [ -x "$TSNODE" ]; then
+        if "$TSNODE" --transpile-only prisma/seed.ts; then
+          echo "[bg] Seed OK — compte administrateur cree."
+        else
+          echo "[bg] !! Seed EN ECHEC — connexion impossible."
+        fi
+      else
+        echo "[bg] !! ts-node introuvable — seed ignore."
+      fi
     fi
   fi
   echo "[bg] --- Preparation terminee ---"
 ) &
 
-# --- Serveur HTTP : démarre tout de suite ---
 echo "--- Lancement du serveur HTTP ---"
 exec node dist/main.js
