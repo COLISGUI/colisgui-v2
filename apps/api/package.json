@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "sh ../../docker-entrypoint.sh",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "start:node": "node dist/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.1",
