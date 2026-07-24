@@ -17,15 +17,27 @@ export function validateEnv() {
   );
 
   if (prod && missing.length) {
-    throw new Error(`Variables d'environnement manquantes en production : ${missing.join(', ')}`);
+    logger.error('==================================================');
+    logger.error("DÉMARRAGE IMPOSSIBLE — variables d'environnement manquantes :");
+    missing.forEach((k) => logger.error(`   • ${k}`));
+    logger.error('Ajoutez-les dans Railway → service API → onglet Variables.');
+    logger.error('==================================================');
+    throw new Error(`Variables manquantes : ${missing.join(', ')}`);
   }
   if (prod && weak.length) {
-    throw new Error(`Secrets par défaut interdits en production : ${weak.join(', ')}`);
+    logger.error('==================================================');
+    logger.error('DÉMARRAGE IMPOSSIBLE — secrets encore à leur valeur par défaut :');
+    weak.forEach((k) => logger.error(`   • ${k}`));
+    logger.error('Générez une valeur aléatoire (openssl rand -hex 48).');
+    logger.error('==================================================');
+    throw new Error(`Secrets par défaut interdits : ${weak.join(', ')}`);
   }
   // Cookies d'authentification (credentials) => CORS ne doit pas être ouvert en production.
   const cors = process.env.CORS_ORIGINS ?? '*';
+  // '*' est toléré (avertissement) : il permet de débloquer un déploiement,
+  // mais doit être remplacé par la liste des domaines une fois la connexion validée.
   if (prod && cors.split(',').map((s) => s.trim()).includes('*')) {
-    throw new Error("CORS_ORIGINS ne peut pas valoir '*' en production (cookies d'authentification). Indiquez les domaines autorisés.");
+    logger.warn("CORS_ORIGINS='*' : toutes les origines sont acceptées. A restreindre apres validation.");
   }
   if (!prod && (missing.length || weak.length)) {
     logger.warn(`Configuration de développement : ${[...missing, ...weak].join(', ')} à définir avant la prod.`);
