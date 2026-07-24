@@ -1,5 +1,9 @@
 #!/bin/sh
 # ColisGui API — démarrage Railway.
+# Se placer dans le dossier du script (/app) : le demarrage fonctionne
+# quel que soit le repertoire depuis lequel Railway invoque la commande.
+cd "$(dirname "$0")" || exit 1
+
 # Le serveur HTTP démarre IMMEDIATEMENT ; le schema et le seed tournent en arriere-plan.
 # Les binaires sont appeles DIRECTEMENT (pas via npx) pour eviter toute erreur ENOENT.
 
