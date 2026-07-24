@@ -22,7 +22,7 @@ COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/tsconfig.json ./tsconfig.json
+COPY tsconfig.json ./tsconfig.json
 COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
