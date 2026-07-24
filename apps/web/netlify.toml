@@ -1,3 +1,21 @@
+# Configuration Netlify — "Base directory" = apps/web
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# 1) PROXY API — DOIT rester AVANT la règle SPA.
+#    Le navigateur appelle /api/... sur le domaine Netlify ; Netlify relaie vers Railway.
+#    Consequence : requetes en MEME ORIGINE -> plus aucun probleme de CORS ni de cookies.
+[[redirects]]
+  from = "/api/*"
+  to = "https://colisguiapi-production.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
+# 2) Fallback SPA (toutes les autres routes)
 [[redirects]]
   from = "/*"
   to = "/index.html"
